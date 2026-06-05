@@ -7,4 +7,81 @@
 <body>
 
 </body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PurpleAdBlock</title>
+    <!-- compiled by: npm run css:build (inside /extension) -->
+    <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+<!-- header -->
+<header class="flex items-center gap-[10px] px-4 pt-[14px] pb-[10px] border-b border-twitch-border">
+    <div class="w-7 h-7 bg-purple rounded-lg flex items-center justify-center text-base flex-shrink-0
+                shadow-[0_0_12px_rgba(145,71,255,0.35)]">
+        🟣
+    </div>
+    <div>
+        <h1 class="font-mono text-[13px] font-bold tracking-tight text-twitch-text">PurpleAdBlock</h1>
+        <p class="text-[10px] text-twitch-muted mt-[1px]">Twitch ad blocker — local proxy</p>
+    </div>
+</header>
+
+<!-- proxy status -->
+<div class="flex items-center gap-[7px] mx-4 mt-3 px-[10px] py-[7px] card">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="text-[11px] text-twitch-muted flex-1" id="statusLabel">Checking proxy…</span>
+</div>
+
+<!-- offline banner -->
+<div id="offlineBanner"
+     class="hidden mx-4 mt-3 px-[10px] py-2 rounded-card text-[11px] leading-relaxed
+              bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.3)] text-[#ff8080]">
+    Proxy is offline. Start it with
+    <code class="font-mono text-[10px] bg-white/[.08] px-1 py-px rounded">node proxy/index.js</code>
+</div>
+
+<!-- main blocker toggle -->
+<div id="mainToggle"
+     class="flex items-center justify-between mx-4 mt-3 px-[14px] py-3 card
+              cursor-pointer transition-colors duration-150 hover:bg-twitch-hover
+              border border-twitch-border"
+     role="button" tabindex="0" aria-pressed="false">
+    <div class="flex flex-col gap-[2px]">
+        <strong class="text-[13px] font-semibold">Ad Blocker</strong>
+        <small class="text-[10px] text-twitch-muted" id="toggleSubtitle">Loading…</small>
+    </div>
+    <label class="toggle-track" id="enabledLabel">
+        <input type="checkbox" id="enabledCheckbox" aria-label="Toggle ad blocker" />
+        <span class="toggle-thumb"></span>
+    </label>
+</div>
+
+<!-- settings section -->
+<p class="text-[10px] font-semibold text-twitch-muted tracking-[0.6px] uppercase px-4 pt-3 pb-[6px]">
+    Settings
+</p>
+
+<div id="autostartRow" class="setting-row" role="button" tabindex="0">
+    <div class="flex flex-col gap-[2px]">
+        <span class="text-[12px] font-medium">Launch at startup</span>
+        <small class="text-[10px] text-twitch-muted">Start proxy automatically on Windows login</small>
+    </div>
+    <label class="toggle-track" id="autostartLabel">
+        <input type="checkbox" id="autostartCheckbox" aria-label="Toggle autostart" />
+        <span class="toggle-thumb"></span>
+    </label>
+</div>
+
+<!-- footer -->
+<footer class="border-t border-twitch-border px-4 py-[10px] mt-[10px]
+                 flex items-center justify-between">
+    <span class="text-[10px] text-twitch-muted" id="proxyPortLabel">Port: —</span>
+</footer>
+
+<script src="popup.js"></script>
+</body>
 </html>
