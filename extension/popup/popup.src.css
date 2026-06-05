@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* base resets */
+/* ── base resets ─────────────────────────────────────────────────────────── */
 @layer base {
     *, *::before, *::after { box-sizing: border-box; }
 
@@ -13,10 +13,9 @@
     }
 }
 
-/* reusable components */
+/* ── reusable components ─────────────────────────────────────────────────── */
 @layer components {
 
-    /* toggle switch */
     .toggle-track {
         @apply relative inline-flex items-center w-[38px] h-[21px] rounded-full
         bg-twitch-border cursor-pointer transition-colors duration-200;
@@ -39,12 +38,10 @@
         transition-transform duration-200;
     }
 
-    /* card surface */
     .card {
         @apply bg-twitch-card border border-twitch-border rounded-card;
     }
 
-    /* pill status badge */
     .status-dot {
         @apply w-[7px] h-[7px] rounded-full flex-shrink-0 transition-colors duration-300;
     }
@@ -52,9 +49,19 @@
     .status-dot.online  { @apply bg-status-online  shadow-[0_0_6px_#00c853]; }
     .status-dot.offline { @apply bg-status-offline shadow-[0_0_6px_#ff4444]; }
 
-    /* setting row */
     .setting-row {
         @apply flex items-center justify-between px-4 py-[9px]
         cursor-pointer transition-colors duration-100 hover:bg-twitch-card;
     }
+
+    /* pulsing dot shown in the "blocking ad" badge */
+    .ad-pulse {
+        @apply inline-block w-[7px] h-[7px] rounded-full bg-purple flex-shrink-0;
+        animation: pulse-ring 1.2s ease-in-out infinite;
+    }
+}
+
+@keyframes pulse-ring {
+    0%, 100% { opacity: 1;   transform: scale(1);    }
+    50%       { opacity: 0.4; transform: scale(1.35); }
 }

@@ -19,21 +19,11 @@ const AD_DATERANGE_CLASSES = [
     'stitched-ad',
 ];
 
-/**
- * returns true if the line is an ad-pod boundary or scte35 cue tag.
- * @param {string} line
- * @returns {boolean}
- */
 function isAdBoundaryTag(line) {
     const upper = line.toUpperCase();
     return AD_TAG_KEYWORDS.some((kw) => upper.includes(kw));
 }
 
-/**
- * returns true if the line is an EXT-X-DATERANGE tag that marks an ad range.
- * @param {string} line
- * @returns {boolean}
- */
 function isAdDateRange(line) {
     if (!line.toUpperCase().includes('EXT-X-DATERANGE')) return false;
     const lower = line.toLowerCase();
@@ -42,24 +32,20 @@ function isAdDateRange(line) {
 
 /**
  * parses a twitch hls playlist and removes all ad-related segments.
- * works for both master playlists (variant streams) and media playlists (segments).
- *
- * strategy:
- *  - track whether we are inside an ad pod (between AD-POD-START and AD-POD-END)
- *  - when an ad tag is found outside a pod, mark the next EXTINF+uri pair for removal
  *
  * @param {string} playlistText - raw .m3u8 content
- * @returns {string} cleaned playlist
+ * @returns {{ playlist: string, blockedCount: number }}
  */
 function filterPlaylist(playlistText) {
     const lines = playlistText.split('\n');
     const output = [];
 
-    let inAdPod = false;
+    let inAdPod        = false;
     let skipNextExtinf = false;
+    let blockedCount   = 0;
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        const line    = lines[i];
         const trimmed = line.trim();
 
         /* ad pod boundaries */
@@ -70,7 +56,7 @@ function filterPlaylist(playlistText) {
         }
         if (trimmed.toUpperCase().includes('EXT-X-AD-POD-END') ||
             trimmed.toUpperCase().includes('EXT-X-CUE-IN')) {
-            inAdPod = false;
+            inAdPod        = false;
             skipNextExtinf = false;
             continue;
         }
@@ -88,25 +74,24 @@ function filterPlaylist(playlistText) {
             continue;
         }
 
-        /* drop the EXTINF tag + segment uri flagged by a preceding ad tag */
+        /* drop the EXTINF + segment uri flagged by a preceding ad tag */
         if (skipNextExtinf) {
             if (trimmed.toUpperCase().startsWith('#EXTINF')) {
-                // skip this EXTINF; the segment uri on the next iteration will also be skipped
                 continue;
             }
             if (trimmed.length > 0 && !trimmed.startsWith('#')) {
-                // this is the segment uri — drop it and reset the flag
+                // this is an ad segment uri — count it
                 skipNextExtinf = false;
+                blockedCount++;
                 continue;
             }
-            // hit a non-EXTINF tag before finding a uri — reset
             if (trimmed.startsWith('#') && !trimmed.toUpperCase().startsWith('#EXTINF')) {
                 skipNextExtinf = false;
             }
         }
         output.push(line);
     }
-    return output.join('\n');
+    return { playlist: output.join('\n'), blockedCount };
 }
 
 module.exports = { filterPlaylist };

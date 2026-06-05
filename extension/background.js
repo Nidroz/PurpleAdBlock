@@ -1,23 +1,31 @@
-const PROXY_ORIGIN= 'http://127.0.0.1:8765';
-const PING_INTERVAL= 5000;
-const RULE_ID_HLS= 1;
+/* global browser, chrome */
+const ext = typeof browser !== 'undefined' ? browser : chrome;
 
-let proxyAlive= false;
+const PROXY_ORIGIN  = 'http://127.0.0.1:8765';
+const PING_INTERVAL = 5000;
+const RULE_ID_HLS   = 1;
+
+let proxyAlive     = false;
 let blockerEnabled = true;
 let proxySettings  = {};
+let proxyStats     = { totalBlocked: 0, sessionBlocked: 0 };
+let adActive       = false;
+let sseSource      = null;
 
-// ping
 async function pingProxy() {
     try {
-        const res= await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
+        const res  = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
         const data = await res.json();
-        proxyAlive = data.alive === true;
+        proxyAlive     = data.alive === true;
         blockerEnabled = data.enabled === true;
     } catch {
         proxyAlive = false;
+        adActive   = false;
+        disconnectSse();
     }
     await syncRedirectRule();
     updateIcon();
+    if (proxyAlive && !sseSource) connectSse();
 }
 
 async function fetchSettings() {
@@ -29,11 +37,51 @@ async function fetchSettings() {
     }
 }
 
+async function fetchStats() {
+    try {
+        const res = await fetch(`${PROXY_ORIGIN}/stats`, { signal: AbortSignal.timeout(2000) });
+        proxyStats = await res.json();
+    } catch {
+        proxyStats = { totalBlocked: 0, sessionBlocked: 0 };
+    }
+}
+
 pingProxy();
 fetchSettings();
+fetchStats();
 setInterval(pingProxy, PING_INTERVAL);
 
-// declarativeNetRequest redirect rule
+function connectSse() {
+    try {
+        sseSource = new EventSource(`${PROXY_ORIGIN}/events`);
+
+        sseSource.onmessage = (e) => {
+            try {
+                const payload = JSON.parse(e.data);
+
+                if (payload.type === 'blocked') {
+                    proxyStats.totalBlocked   = payload.total;
+                    proxyStats.sessionBlocked = payload.session;
+                }
+
+                if (payload.type === 'ad_active') {
+                    adActive = payload.active;
+                    updateIcon();
+                }
+            } catch { /* ignore malformed events */ }
+        };
+
+        sseSource.onerror = () => disconnectSse();
+    } catch { /* not available in all service worker contexts */ }
+}
+
+function disconnectSse() {
+    if (sseSource) {
+        sseSource.close();
+        sseSource = null;
+    }
+}
+
 async function syncRedirectRule() {
     const shouldBlock = proxyAlive && blockerEnabled;
 
@@ -41,16 +89,14 @@ async function syncRedirectRule() {
         await chrome.declarativeNetRequest.updateDynamicRules({
             removeRuleIds: [RULE_ID_HLS],
             addRules: [{
-                id: RULE_ID_HLS,
+                id:       RULE_ID_HLS,
                 priority: 1,
                 action: {
                     type: 'redirect',
-                    redirect: {
-                        regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0`,
-                    },
+                    redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
                 },
                 condition: {
-                    regexFilter: 'https://(usher\\.twitchapps\\.com|[^/]+\\.hls\\.twitchapps\\.com|[^/]+\\.abs\\.hls\\.twitchapps\\.com)/[^?]*\\.m3u8(\\?.*)?$',
+                    regexFilter:   'https://(usher\\.twitchapps\\.com|[^/]+\\.hls\\.twitchapps\\.com|[^/]+\\.abs\\.hls\\.twitchapps\\.com)/[^?]*\\.m3u8(\\?.*)?$',
                     resourceTypes: ['xmlhttprequest', 'media', 'other'],
                 },
             }],
@@ -62,44 +108,46 @@ async function syncRedirectRule() {
     }
 }
 
-// message handler
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
-            sendResponse({ proxyAlive, blockerEnabled });
+            sendResponse({ proxyAlive, blockerEnabled, adActive, stats: proxyStats });
             break;
+
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
             break;
+
         case 'TOGGLE_BLOCKER':
             if (typeof msg.enabled !== 'boolean') {
                 sendResponse({ ok: false, error: 'invalid value' });
                 break;
             }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method: 'POST',
+                method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: msg.enabled }),
+                body:    JSON.stringify({ enabled: msg.enabled }),
             })
                 .then((r) => r.json())
                 .then(async (data) => {
                     blockerEnabled = data.enabled;
-                    proxySettings = data;
+                    proxySettings  = data;
                     await syncRedirectRule();
                     updateIcon();
                     sendResponse({ ok: true, enabled: blockerEnabled });
                 })
                 .catch(() => sendResponse({ ok: false }));
             return true;
+
         case 'TOGGLE_AUTOSTART':
             if (typeof msg.autostart !== 'boolean') {
                 sendResponse({ ok: false, error: 'invalid value' });
                 break;
             }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method: 'POST',
+                method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:  JSON.stringify({ autostart: msg.autostart }),
+                body:    JSON.stringify({ autostart: msg.autostart }),
             })
                 .then((r) => r.json())
                 .then((data) => {
@@ -108,12 +156,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 })
                 .catch(() => sendResponse({ ok: false }));
             return true;
+
         default:
             sendResponse({ ok: false, error: 'unknown message type' });
     }
 });
 
-// icon
 function updateIcon() {
     if (!proxyAlive) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_offline.png' } });
@@ -121,6 +169,9 @@ function updateIcon() {
     } else if (!blockerEnabled) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_disabled.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — disabled' });
+    } else if (adActive) {
+        chrome.action.setIcon({ path: { 48: 'icons/icon_blocking.png' } });
+        chrome.action.setTitle({ title: 'PurpleAdBlock — blocking ad…' });
     } else {
         chrome.action.setIcon({ path: { 48: 'icons/icon48.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — active' });

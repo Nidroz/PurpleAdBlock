@@ -1,7 +1,6 @@
-/* browser API shim — works on both Firefox (browser.*) and Chromium/Brave (chrome.*) */
+/* global browser, chrome */
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 
-/* all dom queries up front */
 const statusDot         = document.getElementById('statusDot');
 const statusLabel       = document.getElementById('statusLabel');
 const offlineBanner     = document.getElementById('offlineBanner');
@@ -10,12 +9,16 @@ const toggleSubtitle    = document.getElementById('toggleSubtitle');
 const enabledCheckbox   = document.getElementById('enabledCheckbox');
 const autostartCheckbox = document.getElementById('autostartCheckbox');
 const proxyPortLabel    = document.getElementById('proxyPortLabel');
+const adActiveBadge     = document.getElementById('adActiveBadge');
+const statSession       = document.getElementById('statSession');
+const statTotal         = document.getElementById('statTotal');
 
-/* init */
 ext.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
     if (!res) return;
     renderProxy(res.proxyAlive);
     renderBlocker(res.blockerEnabled);
+    renderAdActive(res.adActive === true);
+    renderStats(res.stats || {});
 });
 
 ext.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
@@ -24,7 +27,14 @@ ext.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
     proxyPortLabel.textContent = `Port: ${res.port}`;
 });
 
-/* toggle blocker */
+setInterval(() => {
+    ext.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
+        if (!res) return;
+        renderAdActive(res.adActive === true);
+        renderStats(res.stats || {});
+    });
+}, 3000);
+
 enabledCheckbox.addEventListener('change', () => {
     ext.runtime.sendMessage(
         { type: 'TOGGLE_BLOCKER', enabled: enabledCheckbox.checked },
@@ -42,7 +52,6 @@ mainToggle.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') enabledCheckbox.click();
 });
 
-/* toggle autostart */
 autostartCheckbox.addEventListener('change', () => {
     ext.runtime.sendMessage(
         { type: 'TOGGLE_AUTOSTART', autostart: autostartCheckbox.checked },
@@ -59,7 +68,6 @@ document.getElementById('autostartRow').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') autostartCheckbox.click();
 });
 
-/* RENDER HELPERS */
 function renderProxy(alive) {
     if (alive) {
         statusDot.className   = 'status-dot online';
@@ -75,7 +83,6 @@ function renderProxy(alive) {
 function renderBlocker(enabled) {
     enabledCheckbox.checked = enabled;
     mainToggle.setAttribute('aria-pressed', String(enabled));
-
     if (enabled) {
         mainToggle.classList.add('bg-purple-dim', 'border-purple');
         mainToggle.classList.remove('border-twitch-border');
@@ -85,4 +92,14 @@ function renderBlocker(enabled) {
         mainToggle.classList.add('border-twitch-border');
         toggleSubtitle.textContent = 'Blocker is paused';
     }
+}
+
+function renderAdActive(active) {
+    if (active) adActiveBadge.classList.remove('hidden');
+    else        adActiveBadge.classList.add('hidden');
+}
+
+function renderStats(stats) {
+    statSession.textContent = stats.sessionBlocked ?? 0;
+    statTotal.textContent   = stats.totalBlocked   ?? 0;
 }
