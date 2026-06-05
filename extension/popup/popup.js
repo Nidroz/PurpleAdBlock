@@ -1,38 +1,40 @@
-/* all dom queries up front */
-const statusDot= document.getElementById('statusDot');
-const statusLabel= document.getElementById('statusLabel');
-const offlineBanner= document.getElementById('offlineBanner');
-const mainToggle= document.getElementById('mainToggle');
-const toggleSubtitle= document.getElementById('toggleSubtitle');
-const enabledCheckbox= document.getElementById('enabledCheckbox');
-const autostartCheckbox= document.getElementById('autostartCheckbox');
-const proxyPortLabel= document.getElementById('proxyPortLabel');
+/* browser API shim — works on both Firefox (browser.*) and Chromium/Brave (chrome.*) */
+const ext = typeof browser !== 'undefined' ? browser : chrome;
 
-/* init  */
-browser.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
+/* all dom queries up front */
+const statusDot         = document.getElementById('statusDot');
+const statusLabel       = document.getElementById('statusLabel');
+const offlineBanner     = document.getElementById('offlineBanner');
+const mainToggle        = document.getElementById('mainToggle');
+const toggleSubtitle    = document.getElementById('toggleSubtitle');
+const enabledCheckbox   = document.getElementById('enabledCheckbox');
+const autostartCheckbox = document.getElementById('autostartCheckbox');
+const proxyPortLabel    = document.getElementById('proxyPortLabel');
+
+/* init */
+ext.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
     if (!res) return;
     renderProxy(res.proxyAlive);
     renderBlocker(res.blockerEnabled);
 });
 
-browser.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
+ext.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
     if (!res) return;
-    autostartCheckbox.checked = res.autostart === true;
+    autostartCheckbox.checked  = res.autostart === true;
     proxyPortLabel.textContent = `Port: ${res.port}`;
 });
 
 /* toggle blocker */
 enabledCheckbox.addEventListener('change', () => {
-    browser.runtime.sendMessage(
+    ext.runtime.sendMessage(
         { type: 'TOGGLE_BLOCKER', enabled: enabledCheckbox.checked },
         (res) => {
             if (res?.ok) renderBlocker(res.enabled);
-            else enabledCheckbox.checked = !enabledCheckbox.checked; // revert on failure
+            else enabledCheckbox.checked = !enabledCheckbox.checked;
         }
     );
 });
 
-/* clicking the whole row delegates to the checkbox */
 mainToggle.addEventListener('click', (e) => {
     if (e.target !== enabledCheckbox) enabledCheckbox.click();
 });
@@ -42,10 +44,10 @@ mainToggle.addEventListener('keydown', (e) => {
 
 /* toggle autostart */
 autostartCheckbox.addEventListener('change', () => {
-    browser.runtime.sendMessage(
+    ext.runtime.sendMessage(
         { type: 'TOGGLE_AUTOSTART', autostart: autostartCheckbox.checked },
         (res) => {
-            if (!res?.ok) autostartCheckbox.checked = !autostartCheckbox.checked; // revert
+            if (!res?.ok) autostartCheckbox.checked = !autostartCheckbox.checked;
         }
     );
 });
@@ -57,7 +59,7 @@ document.getElementById('autostartRow').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') autostartCheckbox.click();
 });
 
-/* render helpers */
+/* RENDER HELPERS */
 function renderProxy(alive) {
     if (alive) {
         statusDot.className   = 'status-dot online';
