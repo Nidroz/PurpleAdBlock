@@ -96,7 +96,7 @@ PurpleAdBlock/
 │   └── startup.js      → Windows autostart (registry, no shell injection)
 ├── extension/
 │   ├── manifest.json
-│   ├── background.js   → intercepts Twitch HLS requests
+│   ├── background.firefox.js   → intercepts Twitch HLS requests
 │   ├── tailwind.config.js
 │   ├── package.json    → Tailwind CLI dev dependency
 │   └── popup/

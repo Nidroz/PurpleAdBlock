@@ -1,16 +1,16 @@
-const PROXY_ORIGIN  = 'http://127.0.0.1:8765';
-const PING_INTERVAL = 5000; // ms
+const PROXY_ORIGIN = 'http://127.0.0.1:8765';
+const PING_INTERVAL = 5000;
 
-let proxyAlive= false;
+let proxyAlive = false;
 let blockerEnabled= true;
 let proxySettings= {};
 
-// ping the proxy periodically
+// ping
 async function pingProxy() {
     try {
-        const res  = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
+        const res = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
         const data = await res.json();
-        proxyAlive     = data.alive === true;
+        proxyAlive = data.alive === true;
         blockerEnabled = data.enabled === true;
     } catch {
         proxyAlive = false;
@@ -20,7 +20,7 @@ async function pingProxy() {
 
 async function fetchSettings() {
     try {
-        const res  = await fetch(`${PROXY_ORIGIN}/settings`, { signal: AbortSignal.timeout(2000) });
+        const res = await fetch(`${PROXY_ORIGIN}/settings`, { signal: AbortSignal.timeout(2000) });
         proxySettings = await res.json();
     } catch {
         proxySettings = {};
@@ -31,7 +31,7 @@ pingProxy();
 fetchSettings();
 setInterval(pingProxy, PING_INTERVAL);
 
-// intercept twitch hls playlist requests
+// intercept twitch hls requests (MV2 webRequest)
 browser.webRequest.onBeforeRequest.addListener(
     (details) => {
         if (!proxyAlive || !blockerEnabled) return {};
@@ -50,14 +50,13 @@ browser.webRequest.onBeforeRequest.addListener(
     ['blocking']
 );
 
-// message handler for the popup
+// message handler
 browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
             sendResponse({ proxyAlive, blockerEnabled });
             break;
         case 'GET_SETTINGS':
-            // return cached settings; the popup uses this for autostart + port display
             sendResponse(proxySettings);
             break;
         case 'TOGGLE_BLOCKER':
@@ -66,9 +65,9 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 break;
             }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ enabled: msg.enabled }),
+                body:  JSON.stringify({ enabled: msg.enabled }),
             })
                 .then((r) => r.json())
                 .then((data) => {
@@ -78,16 +77,16 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                     sendResponse({ ok: true, enabled: blockerEnabled });
                 })
                 .catch(() => sendResponse({ ok: false }));
-            return true; // keep channel open for async sendResponse
+            return true;
         case 'TOGGLE_AUTOSTART':
             if (typeof msg.autostart !== 'boolean') {
                 sendResponse({ ok: false, error: 'invalid value' });
                 break;
             }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ autostart: msg.autostart }),
+                body:  JSON.stringify({ autostart: msg.autostart }),
             })
                 .then((r) => r.json())
                 .then((data) => {
@@ -96,13 +95,12 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 })
                 .catch(() => sendResponse({ ok: false }));
             return true;
-
         default:
             sendResponse({ ok: false, error: 'unknown message type' });
     }
 });
 
-// icon state
+// icon
 function updateIcon() {
     if (!proxyAlive) {
         browser.browserAction.setIcon({ path: { 48: 'icons/icon_offline.png' } });
