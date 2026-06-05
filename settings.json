@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "autostart": false,
+  "port": 8765
+}
