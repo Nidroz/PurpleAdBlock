@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "Block Twitch ads via a local HLS proxy. No quality drop, no interruptions.",
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "browser_action": {
@@ -19,14 +19,13 @@
   "permissions": [
     "webRequest",
     "webRequestBlocking",
-    "storage",
-    "tabs",
-    "*://*.twitchapps.com/*",
-    "*://*.twitch.tv/*"
+    "*://usher.twitchapps.com/*.m3u8*",
+    "*://*.hls.twitchapps.com/*.m3u8*",
+    "*://*.abs.hls.twitchapps.com/*.m3u8*"
   ],
   "background": {
     "scripts": ["background.js"],
     "persistent": true
   },
-  "content_security_policy": "script-src 'self'; object-src 'self'"
+  "content_security_policy": "script-src 'self'; object-src 'none'"
 }
