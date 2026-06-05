@@ -1,0 +1,12 @@
+{
+  "name": "purpleadblock-extension",
+  "version": "1.0.0",
+  "description": "PurpleAdBlock extension — Tailwind CSS build",
+  "scripts": {
+    "css:build": "tailwindcss -i ./popup/popup.src.css -o ./popup/popup.css --minify",
+    "css:watch": "tailwindcss -i ./popup/popup.src.css -o ./popup/popup.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

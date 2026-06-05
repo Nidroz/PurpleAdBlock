@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* base resets */
+@layer base {
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+        @apply w-popup bg-twitch-bg text-twitch-text font-sans text-[13px] overflow-hidden;
+    }
+}
+
+/* reusable components */
+@layer components {
+
+    /* toggle switch */
+    .toggle-track {
+        @apply relative inline-flex items-center w-[38px] h-[21px] rounded-full
+        bg-twitch-border cursor-pointer transition-colors duration-200;
+    }
+
+    .toggle-track input {
+        @apply sr-only;
+    }
+
+    .toggle-track input:checked ~ .toggle-thumb {
+        @apply translate-x-[17px];
+    }
+
+    .toggle-track:has(input:checked) {
+        @apply bg-purple;
+    }
+
+    .toggle-thumb {
+        @apply absolute left-[3px] w-[15px] h-[15px] rounded-full bg-white
+        transition-transform duration-200;
+    }
+
+    /* card surface */
+    .card {
+        @apply bg-twitch-card border border-twitch-border rounded-card;
+    }
+
+    /* pill status badge */
+    .status-dot {
+        @apply w-[7px] h-[7px] rounded-full flex-shrink-0 transition-colors duration-300;
+    }
+
+    .status-dot.online  { @apply bg-status-online  shadow-[0_0_6px_#00c853]; }
+    .status-dot.offline { @apply bg-status-offline shadow-[0_0_6px_#ff4444]; }
+
+    /* setting row */
+    .setting-row {
+        @apply flex items-center justify-between px-4 py-[9px]
+        cursor-pointer transition-colors duration-100 hover:bg-twitch-card;
+    }
+}
