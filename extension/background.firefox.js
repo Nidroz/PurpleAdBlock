@@ -1,5 +1,4 @@
-/* global browser, chrome */
-const ext = typeof browser !== 'undefined' ? browser : chrome;
+/* global browser */
 
 const PROXY_ORIGIN  = 'http://127.0.0.1:8765';
 const PING_INTERVAL = 5000;
@@ -52,26 +51,20 @@ setInterval(pingProxy, PING_INTERVAL);
 function connectSse() {
     try {
         sseSource = new EventSource(`${PROXY_ORIGIN}/events`);
-
         sseSource.onmessage = (e) => {
             try {
                 const payload = JSON.parse(e.data);
-
                 if (payload.type === 'blocked') {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
                 }
-
                 if (payload.type === 'ad_active') {
                     adActive = payload.active;
                     updateIcon();
                 }
             } catch { /* ignore malformed events */ }
         };
-
-        sseSource.onerror = () => {
-            disconnectSse();
-        };
+        sseSource.onerror = () => disconnectSse();
     } catch { /* EventSource not available in all bg contexts */ }
 }
 
@@ -95,6 +88,7 @@ browser.webRequest.onBeforeRequest.addListener(
             '*://usher.twitchapps.com/*.m3u8*',
             '*://*.hls.twitchapps.com/*.m3u8*',
             '*://*.abs.hls.twitchapps.com/*.m3u8*',
+            '*://*.playlist.ttvnw.net/*.m3u8*',
         ],
     },
     ['blocking']
@@ -105,20 +99,15 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'GET_STATUS':
             sendResponse({ proxyAlive, blockerEnabled, adActive, stats: proxyStats });
             break;
-
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
             break;
-
         case 'TOGGLE_BLOCKER':
-            if (typeof msg.enabled !== 'boolean') {
-                sendResponse({ ok: false, error: 'invalid value' });
-                break;
-            }
+            if (typeof msg.enabled !== 'boolean') { sendResponse({ ok: false }); break; }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ enabled: msg.enabled }),
+                body: JSON.stringify({ enabled: msg.enabled }),
             })
                 .then((r) => r.json())
                 .then((data) => {
@@ -129,25 +118,17 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 })
                 .catch(() => sendResponse({ ok: false }));
             return true;
-
         case 'TOGGLE_AUTOSTART':
-            if (typeof msg.autostart !== 'boolean') {
-                sendResponse({ ok: false, error: 'invalid value' });
-                break;
-            }
+            if (typeof msg.autostart !== 'boolean') { sendResponse({ ok: false }); break; }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ autostart: msg.autostart }),
+                body: JSON.stringify({ autostart: msg.autostart }),
             })
                 .then((r) => r.json())
-                .then((data) => {
-                    proxySettings = data;
-                    sendResponse({ ok: true, autostart: data.autostart });
-                })
+                .then((data) => { proxySettings = data; sendResponse({ ok: true, autostart: data.autostart }); })
                 .catch(() => sendResponse({ ok: false }));
             return true;
-
         default:
             sendResponse({ ok: false, error: 'unknown message type' });
     }

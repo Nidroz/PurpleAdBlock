@@ -1,9 +1,11 @@
-/* global browser, chrome */
-const ext = typeof browser !== 'undefined' ? browser : chrome;
+/* global chrome */
 
 const PROXY_ORIGIN  = 'http://127.0.0.1:8765';
 const PING_INTERVAL = 5000;
-const RULE_ID_HLS   = 1;
+
+// two separate rules to stay under the 2KB regex memory limit per rule
+const RULE_TWITCHAPPS = 1;
+const RULE_TTVNW      = 2;
 
 let proxyAlive     = false;
 let blockerEnabled = true;
@@ -23,7 +25,7 @@ async function pingProxy() {
         adActive   = false;
         disconnectSse();
     }
-    await syncRedirectRule();
+    await syncRedirectRules();
     updateIcon();
     if (proxyAlive && !sseSource) connectSse();
 }
@@ -54,23 +56,19 @@ setInterval(pingProxy, PING_INTERVAL);
 function connectSse() {
     try {
         sseSource = new EventSource(`${PROXY_ORIGIN}/events`);
-
         sseSource.onmessage = (e) => {
             try {
                 const payload = JSON.parse(e.data);
-
                 if (payload.type === 'blocked') {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
                 }
-
                 if (payload.type === 'ad_active') {
                     adActive = payload.active;
                     updateIcon();
                 }
             } catch { /* ignore malformed events */ }
         };
-
         sseSource.onerror = () => disconnectSse();
     } catch { /* not available in all service worker contexts */ }
 }
@@ -82,28 +80,43 @@ function disconnectSse() {
     }
 }
 
-async function syncRedirectRule() {
+async function syncRedirectRules() {
     const shouldBlock = proxyAlive && blockerEnabled;
-
     if (shouldBlock) {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_ID_HLS],
-            addRules: [{
-                id:       RULE_ID_HLS,
-                priority: 1,
-                action: {
-                    type: 'redirect',
-                    redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
+            removeRuleIds: [RULE_TWITCHAPPS, RULE_TTVNW],
+            addRules: [
+                {
+                    // covers usher + *.hls.twitchapps.com + *.abs.hls.twitchapps.com
+                    id: RULE_TWITCHAPPS,
+                    priority: 1,
+                    action: {
+                        type: 'redirect',
+                        redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
+                    },
+                    condition: {
+                        regexFilter: 'https://[^/]*\\.twitchapps\\.com/[^?]*\\.m3u8(\\?.*)?$',
+                        resourceTypes: ['xmlhttprequest', 'media', 'other'],
+                    },
                 },
-                condition: {
-                    regexFilter:   'https://(usher\\.twitchapps\\.com|[^/]+\\.hls\\.twitchapps\\.com|[^/]+\\.abs\\.hls\\.twitchapps\\.com)/[^?]*\\.m3u8(\\?.*)?$',
-                    resourceTypes: ['xmlhttprequest', 'media', 'other'],
+                {
+                    // covers *.playlist.ttvnw.net
+                    id: RULE_TTVNW,
+                    priority: 1,
+                    action: {
+                        type: 'redirect',
+                        redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
+                    },
+                    condition: {
+                        regexFilter: 'https://[^/]*\\.playlist\\.ttvnw\\.net/[^?]*\\.m3u8(\\?.*)?$',
+                        resourceTypes: ['xmlhttprequest', 'media', 'other'],
+                    },
                 },
-            }],
+            ],
         });
     } else {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_ID_HLS],
+            removeRuleIds: [RULE_TWITCHAPPS, RULE_TTVNW],
         });
     }
 }
@@ -113,50 +126,37 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'GET_STATUS':
             sendResponse({ proxyAlive, blockerEnabled, adActive, stats: proxyStats });
             break;
-
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
             break;
-
         case 'TOGGLE_BLOCKER':
-            if (typeof msg.enabled !== 'boolean') {
-                sendResponse({ ok: false, error: 'invalid value' });
-                break;
-            }
+            if (typeof msg.enabled !== 'boolean') { sendResponse({ ok: false }); break; }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ enabled: msg.enabled }),
+                body: JSON.stringify({ enabled: msg.enabled }),
             })
                 .then((r) => r.json())
                 .then(async (data) => {
                     blockerEnabled = data.enabled;
                     proxySettings  = data;
-                    await syncRedirectRule();
+                    await syncRedirectRules();
                     updateIcon();
                     sendResponse({ ok: true, enabled: blockerEnabled });
                 })
                 .catch(() => sendResponse({ ok: false }));
             return true;
-
         case 'TOGGLE_AUTOSTART':
-            if (typeof msg.autostart !== 'boolean') {
-                sendResponse({ ok: false, error: 'invalid value' });
-                break;
-            }
+            if (typeof msg.autostart !== 'boolean') { sendResponse({ ok: false }); break; }
             fetch(`${PROXY_ORIGIN}/settings`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ autostart: msg.autostart }),
+                body: JSON.stringify({ autostart: msg.autostart }),
             })
                 .then((r) => r.json())
-                .then((data) => {
-                    proxySettings = data;
-                    sendResponse({ ok: true, autostart: data.autostart });
-                })
+                .then((data) => { proxySettings = data; sendResponse({ ok: true, autostart: data.autostart }); })
                 .catch(() => sendResponse({ ok: false }));
             return true;
-
         default:
             sendResponse({ ok: false, error: 'unknown message type' });
     }

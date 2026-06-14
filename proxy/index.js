@@ -74,6 +74,9 @@ app.get('/hls', async (req, res) => {
 
     try {
         const response = await fetchFromTwitch(parsed.href, 'text');
+        const fs = require('fs');
+        fs.writeFileSync(`playlist-dump-${Date.now()}.m3u8`, response.data, 'utf-8');
+
         let playlist = response.data;
         let blocked     = 0;
 

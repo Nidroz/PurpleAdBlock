@@ -24,6 +24,7 @@
     "*://usher.twitchapps.com/*.m3u8*",
     "*://*.hls.twitchapps.com/*.m3u8*",
     "*://*.abs.hls.twitchapps.com/*.m3u8*",
+    "*://*.playlist.ttvnw.net/*.m3u8*",
     "http://127.0.0.1:8765/*"
   ],
   "background": {
