@@ -14,7 +14,13 @@ let proxySettings  = {};
 let proxyStats     = { totalBlocked: 0, sessionBlocked: 0 };
 let sseSource      = null;
 
+// transient "just served an ad-free stream" state, for the icon flash + popup badge
+let lastServedAt = 0;
+let lastChannel  = '';
+let servedTimer  = null;
+
 async function pingProxy() {
+    const wasAlive = proxyAlive;
     try {
         const res  = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
         const data = await res.json();
@@ -23,6 +29,11 @@ async function pingProxy() {
     } catch {
         proxyAlive = false;
         disconnectSse();
+    }
+    // when the proxy just became reachable, (re)load settings + stats
+    if (proxyAlive && !wasAlive) {
+        fetchSettings();
+        fetchStats();
     }
     await syncRedirectRule();
     updateIcon();
@@ -58,9 +69,13 @@ function connectSse() {
         sseSource.onmessage = (e) => {
             try {
                 const payload = JSON.parse(e.data);
-                if (payload.type === 'blocked') {
+                if (payload.type === 'served') {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
+                    lastServedAt = Date.now();
+                    lastChannel  = payload.channel || '';
+                    console.log(`[PurpleAdBlock] ✓ ad-free stream served — ${lastChannel || 'twitch'} (session ${payload.session}, total ${payload.total})`);
+                    flashServed();
                 }
             } catch { /* ignore malformed events */ }
         };
@@ -75,11 +90,24 @@ function disconnectSse() {
     }
 }
 
+// briefly show the "blocking" icon when a fresh ad-free stream is served
+function flashServed() {
+    updateIcon();
+    if (servedTimer) clearTimeout(servedTimer);
+    servedTimer = setTimeout(() => { lastServedAt = 0; updateIcon(); }, 4000);
+}
+
 async function syncRedirectRule() {
     const shouldBlock = proxyAlive && blockerEnabled;
+
+    // clear any stale rules left by previous versions (e.g. old twitchapps /
+    // playlist.ttvnw.net rules) so only the usher rule remains.
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    const staleIds = existing.map((r) => r.id).filter((id) => id !== RULE_USHER);
+
     if (shouldBlock) {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_USHER],
+            removeRuleIds: [RULE_USHER, ...staleIds],
             addRules: [{
                 id: RULE_USHER,
                 priority: 1,
@@ -95,7 +123,7 @@ async function syncRedirectRule() {
         });
     } else {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_USHER],
+            removeRuleIds: [RULE_USHER, ...staleIds],
         });
     }
 }
@@ -103,7 +131,7 @@ async function syncRedirectRule() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
-            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats });
+            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats, lastServedAt, lastChannel });
             break;
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
@@ -142,12 +170,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 function updateIcon() {
+    const servedRecently = Date.now() - lastServedAt < 4000;
     if (!proxyAlive) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_offline.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — proxy offline' });
     } else if (!blockerEnabled) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_disabled.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — disabled' });
+    } else if (servedRecently) {
+        chrome.action.setIcon({ path: { 48: 'icons/icon_blocking.png' } });
+        chrome.action.setTitle({ title: `PurpleAdBlock — ad-free stream loaded${lastChannel ? ` (${lastChannel})` : ''}` });
     } else {
         chrome.action.setIcon({ path: { 48: 'icons/icon48.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — active' });
