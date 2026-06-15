@@ -1,5 +1,6 @@
 {
-  "enabled": false,
-  "autostart": true,
-  "port": 8765
+  "enabled": true,
+  "autostart": false,
+  "port": 8765,
+  "proxyUrl": "https://eu.luminous.dev"
 }

@@ -3,15 +3,15 @@
 const PROXY_ORIGIN  = 'http://127.0.0.1:8765';
 const PING_INTERVAL = 5000;
 
-// two separate rules to stay under the 2KB regex memory limit per rule
-const RULE_TWITCHAPPS = 1;
-const RULE_TTVNW      = 2;
+// single rule: redirect the usher master-playlist request to the local proxy.
+// the trailing .* makes \0 include the usher query string so the proxy can
+// rebuild the relay request (and fall back to the original signed url).
+const RULE_USHER = 1;
 
 let proxyAlive     = false;
 let blockerEnabled = true;
 let proxySettings  = {};
 let proxyStats     = { totalBlocked: 0, sessionBlocked: 0 };
-let adActive       = false;
 let sseSource      = null;
 
 async function pingProxy() {
@@ -22,10 +22,9 @@ async function pingProxy() {
         blockerEnabled = data.enabled === true;
     } catch {
         proxyAlive = false;
-        adActive   = false;
         disconnectSse();
     }
-    await syncRedirectRules();
+    await syncRedirectRule();
     updateIcon();
     if (proxyAlive && !sseSource) connectSse();
 }
@@ -63,10 +62,6 @@ function connectSse() {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
                 }
-                if (payload.type === 'ad_active') {
-                    adActive = payload.active;
-                    updateIcon();
-                }
             } catch { /* ignore malformed events */ }
         };
         sseSource.onerror = () => disconnectSse();
@@ -80,43 +75,27 @@ function disconnectSse() {
     }
 }
 
-async function syncRedirectRules() {
+async function syncRedirectRule() {
     const shouldBlock = proxyAlive && blockerEnabled;
     if (shouldBlock) {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_TWITCHAPPS, RULE_TTVNW],
-            addRules: [
-                {
-                    // covers usher + *.hls.twitchapps.com + *.abs.hls.twitchapps.com
-                    id: RULE_TWITCHAPPS,
-                    priority: 1,
-                    action: {
-                        type: 'redirect',
-                        redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
-                    },
-                    condition: {
-                        regexFilter: 'https://[^/]*\\.twitchapps\\.com/[^?]*\\.m3u8(\\?.*)?$',
-                        resourceTypes: ['xmlhttprequest', 'media', 'other'],
-                    },
+            removeRuleIds: [RULE_USHER],
+            addRules: [{
+                id: RULE_USHER,
+                priority: 1,
+                action: {
+                    type: 'redirect',
+                    redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
                 },
-                {
-                    // covers *.playlist.ttvnw.net
-                    id: RULE_TTVNW,
-                    priority: 1,
-                    action: {
-                        type: 'redirect',
-                        redirect: { regexSubstitution: `${PROXY_ORIGIN}/hls?url=\\0` },
-                    },
-                    condition: {
-                        regexFilter: 'https://[^/]*\\.playlist\\.ttvnw\\.net/[^?]*\\.m3u8(\\?.*)?$',
-                        resourceTypes: ['xmlhttprequest', 'media', 'other'],
-                    },
+                condition: {
+                    regexFilter: '^https://usher\\.ttvnw\\.net/(?:api/(?:v\\d+/)?channel/hls|vod)/[^/]+\\.m3u8.*$',
+                    resourceTypes: ['xmlhttprequest', 'media', 'other'],
                 },
-            ],
+            }],
         });
     } else {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [RULE_TWITCHAPPS, RULE_TTVNW],
+            removeRuleIds: [RULE_USHER],
         });
     }
 }
@@ -124,7 +103,7 @@ async function syncRedirectRules() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
-            sendResponse({ proxyAlive, blockerEnabled, adActive, stats: proxyStats });
+            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats });
             break;
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
@@ -140,7 +119,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 .then(async (data) => {
                     blockerEnabled = data.enabled;
                     proxySettings  = data;
-                    await syncRedirectRules();
+                    await syncRedirectRule();
                     updateIcon();
                     sendResponse({ ok: true, enabled: blockerEnabled });
                 })
@@ -169,9 +148,6 @@ function updateIcon() {
     } else if (!blockerEnabled) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_disabled.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — disabled' });
-    } else if (adActive) {
-        chrome.action.setIcon({ path: { 48: 'icons/icon_blocking.png' } });
-        chrome.action.setTitle({ title: 'PurpleAdBlock — blocking ad…' });
     } else {
         chrome.action.setIcon({ path: { 48: 'icons/icon48.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — active' });

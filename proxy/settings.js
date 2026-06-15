@@ -1,4 +1,4 @@
-const fs= require('fs');
+const fs   = require('fs');
 const path = require('path');
 
 const SETTINGS_PATH = path.join(__dirname, '..', 'settings.json');
@@ -7,6 +7,7 @@ const DEFAULTS = {
     enabled: true,
     autostart: false,
     port: 8765,
+    proxyUrl: '', // ad-free relay base url; empty means "serve original playlist"
 };
 
 /**
@@ -22,6 +23,9 @@ function sanitise(raw) {
         port: Number.isInteger(raw.port) && raw.port > 1024 && raw.port < 65536 // 1025-65535 are valid non-privileged ports
             ? raw.port
             : DEFAULTS.port,
+        proxyUrl: typeof raw.proxyUrl === 'string' && (raw.proxyUrl === '' || /^https?:\/\//i.test(raw.proxyUrl))
+            ? raw.proxyUrl.trim()
+            : DEFAULTS.proxyUrl,
     };
 }
 
@@ -60,8 +64,8 @@ function saveSettings(settings) {
  * @returns {object} updated settings
  */
 function updateSettings(patch) {
-    const current= loadSettings();
-    const updated= sanitise({ ...current, ...patch });
+    const current = loadSettings();
+    const updated = sanitise({ ...current, ...patch });
     saveSettings(updated);
     return updated;
 }

@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "PurpleAdBlock",
-  "version": "1.0.0",
-  "description": "Block Twitch ads via a local HLS proxy. No quality drop, no interruptions.",
+  "version": "2.0.0",
+  "description": "Avoid Twitch ads via an ad-free playlist relay. No quality drop, no interruptions.",
   "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
@@ -21,10 +21,8 @@
     "storage"
   ],
   "host_permissions": [
-    "*://usher.twitchapps.com/*.m3u8*",
-    "*://*.hls.twitchapps.com/*.m3u8*",
-    "*://*.abs.hls.twitchapps.com/*.m3u8*",
-    "*://*.playlist.ttvnw.net/*.m3u8*",
+    "*://*.twitch.tv/*",
+    "*://usher.ttvnw.net/*",
     "http://127.0.0.1:8765/*"
   ],
   "background": {

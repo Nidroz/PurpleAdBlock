@@ -7,7 +7,6 @@ let proxyAlive     = false;
 let blockerEnabled = true;
 let proxySettings  = {};
 let proxyStats     = { totalBlocked: 0, sessionBlocked: 0 };
-let adActive       = false;
 let sseSource      = null;
 
 async function pingProxy() {
@@ -18,7 +17,6 @@ async function pingProxy() {
         blockerEnabled = data.enabled === true;
     } catch {
         proxyAlive = false;
-        adActive   = false;
         disconnectSse();
     }
     updateIcon();
@@ -58,10 +56,6 @@ function connectSse() {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
                 }
-                if (payload.type === 'ad_active') {
-                    adActive = payload.active;
-                    updateIcon();
-                }
             } catch { /* ignore malformed events */ }
         };
         sseSource.onerror = () => disconnectSse();
@@ -75,20 +69,21 @@ function disconnectSse() {
     }
 }
 
+// redirect only the usher master-playlist request. the channel/vod media
+// playlists (weaver) and the video segments are left to load directly from
+// twitch's cdn, so quality is untouched.
 browser.webRequest.onBeforeRequest.addListener(
     (details) => {
         if (!proxyAlive || !blockerEnabled) return {};
-        if (!details.url.includes('.m3u8')) return {};
         return {
             redirectUrl: `${PROXY_ORIGIN}/hls?url=${encodeURIComponent(details.url)}`,
         };
     },
     {
         urls: [
-            '*://usher.twitchapps.com/*.m3u8*',
-            '*://*.hls.twitchapps.com/*.m3u8*',
-            '*://*.abs.hls.twitchapps.com/*.m3u8*',
-            '*://*.playlist.ttvnw.net/*.m3u8*',
+            'https://usher.ttvnw.net/api/channel/hls/*',
+            'https://usher.ttvnw.net/api/v*/channel/hls/*',
+            'https://usher.ttvnw.net/vod/*',
         ],
     },
     ['blocking']
@@ -97,7 +92,7 @@ browser.webRequest.onBeforeRequest.addListener(
 browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
-            sendResponse({ proxyAlive, blockerEnabled, adActive, stats: proxyStats });
+            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats });
             break;
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
@@ -141,9 +136,6 @@ function updateIcon() {
     } else if (!blockerEnabled) {
         browser.browserAction.setIcon({ path: { 48: 'icons/icon_disabled.png' } });
         browser.browserAction.setTitle({ title: 'PurpleAdBlock — disabled' });
-    } else if (adActive) {
-        browser.browserAction.setIcon({ path: { 48: 'icons/icon_blocking.png' } });
-        browser.browserAction.setTitle({ title: 'PurpleAdBlock — blocking ad…' });
     } else {
         browser.browserAction.setIcon({ path: { 48: 'icons/icon48.png' } });
         browser.browserAction.setTitle({ title: 'PurpleAdBlock — active' });
