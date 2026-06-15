@@ -10,14 +10,19 @@ const enabledCheckbox   = document.getElementById('enabledCheckbox');
 const autostartCheckbox = document.getElementById('autostartCheckbox');
 const proxyPortLabel    = document.getElementById('proxyPortLabel');
 const adActiveBadge     = document.getElementById('adActiveBadge');
+const adActiveText      = document.getElementById('adActiveText');
 const statSession       = document.getElementById('statSession');
 const statTotal         = document.getElementById('statTotal');
+
+// how long the "just served" badge stays visible after a stream is served
+const SERVED_WINDOW_MS = 4000;
+let servedHideTimer = null;
 
 ext.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
     if (!res) return;
     renderProxy(res.proxyAlive);
     renderBlocker(res.blockerEnabled);
-    renderAdActive(res.adActive === true);
+    renderServed(res.lastServedAt, res.lastChannel);
     renderStats(res.stats || {});
 });
 
@@ -30,10 +35,11 @@ ext.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
 setInterval(() => {
     ext.runtime.sendMessage({ type: 'GET_STATUS' }, (res) => {
         if (!res) return;
-        renderAdActive(res.adActive === true);
+        renderProxy(res.proxyAlive);
+        renderServed(res.lastServedAt, res.lastChannel);
         renderStats(res.stats || {});
     });
-}, 3000);
+}, 2000);
 
 enabledCheckbox.addEventListener('change', () => {
     ext.runtime.sendMessage(
@@ -94,9 +100,22 @@ function renderBlocker(enabled) {
     }
 }
 
-function renderAdActive(active) {
-    if (active) adActiveBadge.classList.remove('hidden');
-    else        adActiveBadge.classList.add('hidden');
+// shows a transient badge when an ad-free stream was just served
+function renderServed(lastServedAt, channel) {
+    const elapsed = lastServedAt ? Date.now() - lastServedAt : Infinity;
+    if (elapsed < SERVED_WINDOW_MS) {
+        adActiveText.textContent = channel
+            ? `Ad-free stream loaded — ${channel}`
+            : 'Ad-free stream loaded';
+        adActiveBadge.classList.remove('hidden');
+        if (servedHideTimer) clearTimeout(servedHideTimer);
+        servedHideTimer = setTimeout(
+            () => adActiveBadge.classList.add('hidden'),
+            SERVED_WINDOW_MS - elapsed
+        );
+    } else {
+        adActiveBadge.classList.add('hidden');
+    }
 }
 
 function renderStats(stats) {

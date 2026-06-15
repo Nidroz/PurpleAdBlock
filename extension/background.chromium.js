@@ -14,6 +14,11 @@ let proxySettings  = {};
 let proxyStats     = { totalBlocked: 0, sessionBlocked: 0 };
 let sseSource      = null;
 
+// transient "just served an ad-free stream" state, for the icon flash + popup badge
+let lastServedAt = 0;
+let lastChannel  = '';
+let servedTimer  = null;
+
 async function pingProxy() {
     try {
         const res  = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
@@ -58,9 +63,13 @@ function connectSse() {
         sseSource.onmessage = (e) => {
             try {
                 const payload = JSON.parse(e.data);
-                if (payload.type === 'blocked') {
+                if (payload.type === 'served') {
                     proxyStats.totalBlocked   = payload.total;
                     proxyStats.sessionBlocked = payload.session;
+                    lastServedAt = Date.now();
+                    lastChannel  = payload.channel || '';
+                    console.log(`[PurpleAdBlock] ✓ ad-free stream served — ${lastChannel || 'twitch'} (session ${payload.session}, total ${payload.total})`);
+                    flashServed();
                 }
             } catch { /* ignore malformed events */ }
         };
@@ -73,6 +82,13 @@ function disconnectSse() {
         sseSource.close();
         sseSource = null;
     }
+}
+
+// briefly show the "blocking" icon when a fresh ad-free stream is served
+function flashServed() {
+    updateIcon();
+    if (servedTimer) clearTimeout(servedTimer);
+    servedTimer = setTimeout(() => { lastServedAt = 0; updateIcon(); }, 4000);
 }
 
 async function syncRedirectRule() {
@@ -109,7 +125,7 @@ async function syncRedirectRule() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
         case 'GET_STATUS':
-            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats });
+            sendResponse({ proxyAlive, blockerEnabled, stats: proxyStats, lastServedAt, lastChannel });
             break;
         case 'GET_SETTINGS':
             sendResponse(proxySettings);
@@ -148,12 +164,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 function updateIcon() {
+    const servedRecently = Date.now() - lastServedAt < 4000;
     if (!proxyAlive) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_offline.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — proxy offline' });
     } else if (!blockerEnabled) {
         chrome.action.setIcon({ path: { 48: 'icons/icon_disabled.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — disabled' });
+    } else if (servedRecently) {
+        chrome.action.setIcon({ path: { 48: 'icons/icon_blocking.png' } });
+        chrome.action.setTitle({ title: `PurpleAdBlock — ad-free stream loaded${lastChannel ? ` (${lastChannel})` : ''}` });
     } else {
         chrome.action.setIcon({ path: { 48: 'icons/icon48.png' } });
         chrome.action.setTitle({ title: 'PurpleAdBlock — active' });

@@ -4,7 +4,7 @@ const { parseUsherUrl, buildRelayUrl } = require('./twitch-playlist');
 const { loadSettings, updateSettings } = require('./settings');
 const { enableAutostart, disableAutostart } = require('./startup');
 const { startTray } = require('./tray');
-const { loadStats, getStats, recordBlocked, addSseClient, removeSseClient } = require('./stats');
+const { loadStats, getStats, recordServed, addSseClient, removeSseClient } = require('./stats');
 
 // ad-free relay instance (luminous-ttv compatible). leave empty to configure
 // it at runtime via settings.json ("proxyUrl") instead of hardcoding here.
@@ -104,7 +104,7 @@ app.get('/hls', async (req, res) => {
                 validateStatus: (s) => s === 200,
             });
             if (typeof out.data === 'string' && out.data.startsWith('#EXTM3U')) {
-                recordBlocked(1); // one ad-free playlist served
+                recordServed(parsed.id); // one ad-free playlist served
                 console.log(`[proxy] ✓ ad-free playlist served for ${parsed.id}`);
                 return res
                     .status(200)

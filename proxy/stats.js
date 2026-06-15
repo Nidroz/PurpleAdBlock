@@ -5,8 +5,8 @@ const STATS_PATH = path.join(__dirname, '..', 'stats.json');
 
 // in-memory state
 let stats = {
-    totalBlocked: 0,   // total ad segments blocked since install
-    sessionBlocked: 0, // blocked since last proxy start
+    totalBlocked: 0,   // ad-free streams served since install
+    sessionBlocked: 0, // since last proxy start
 };
 
 // SSE clients waiting for live events
@@ -40,24 +40,20 @@ function saveStats() {
 }
 
 /**
- * records that n ad segments were blocked in a single playlist.
+ * records that an ad-free playlist was served for a channel.
  * broadcasts a live event to all connected SSE clients.
- * @param {number} n - number of segments blocked
+ * @param {string} channel - the twitch channel/vod id the playlist was served for
  */
-function recordBlocked(n) {
-    if (n <= 0) return;
-    stats.totalBlocked   += n;
-    stats.sessionBlocked += n;
+function recordServed(channel) {
+    stats.totalBlocked   += 1;
+    stats.sessionBlocked += 1;
     saveStats();
-    broadcast({ type: 'blocked', count: n, total: stats.totalBlocked, session: stats.sessionBlocked });
-}
-
-/**
- * signals that an active ad is currently being stripped (called per request).
- * @param {boolean} active
- */
-function broadcastAdActive(active) {
-    broadcast({ type: 'ad_active', active });
+    broadcast({
+        type: 'served',
+        channel: channel || '',
+        total: stats.totalBlocked,
+        session: stats.sessionBlocked,
+    });
 }
 
 /**
@@ -100,4 +96,4 @@ function broadcast(payload) {
     }
 }
 
-module.exports = { loadStats, getStats, recordBlocked, broadcastAdActive, addSseClient, removeSseClient };
+module.exports = { loadStats, getStats, recordServed, addSseClient, removeSseClient };

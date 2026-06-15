@@ -34,12 +34,12 @@
     <code class="font-mono text-[10px] bg-white/[.08] px-1 py-px rounded">node proxy/index.js</code>
 </div>
 
-<!-- ad active badge -->
+<!-- "just served an ad-free stream" badge -->
 <div id="adActiveBadge"
      class="hidden mx-4 mt-3 px-[10px] py-[6px] rounded-card text-[11px] font-medium
             bg-[rgba(145,71,255,0.15)] border border-purple flex items-center gap-2">
     <span class="ad-pulse"></span>
-    Blocking ad in progress…
+    <span id="adActiveText">Ad-free stream loaded</span>
 </div>
 
 <!-- main blocker toggle -->
@@ -63,12 +63,12 @@
     <div class="card flex-1 px-3 py-2 flex flex-col gap-[2px]">
         <span class="text-[10px] text-twitch-muted uppercase tracking-[0.6px] font-semibold">Session</span>
         <span class="font-mono text-[18px] font-bold text-purple" id="statSession">0</span>
-        <span class="text-[9px] text-twitch-muted">ads blocked</span>
+        <span class="text-[9px] text-twitch-muted">ad-free streams</span>
     </div>
     <div class="card flex-1 px-3 py-2 flex flex-col gap-[2px]">
         <span class="text-[10px] text-twitch-muted uppercase tracking-[0.6px] font-semibold">All time</span>
         <span class="font-mono text-[18px] font-bold text-twitch-text" id="statTotal">0</span>
-        <span class="text-[9px] text-twitch-muted">ads blocked</span>
+        <span class="text-[9px] text-twitch-muted">ad-free streams</span>
     </div>
 </div>
 
