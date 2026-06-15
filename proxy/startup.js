@@ -1,21 +1,40 @@
 const { execFileSync } = require('child_process');
+const fs   = require('fs');
 const path = require('path');
 
 const APP_NAME = 'PurpleAdBlock';
 const APP_PATH = path.resolve(__dirname, 'index.js');
+const VBS_PATH = path.resolve(__dirname, 'launch-hidden.vbs');
+const RUN_KEY  = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 
 /**
- * builds the reg.exe arguments array for adding the autostart key.
- * uses execFileSync (not execSync) to avoid any shell injection risk —
- * arguments are passed as an array, never interpolated into a shell string.
+ * writes a .vbs wrapper that launches the proxy with a hidden window.
+ * node.exe is a console app, so launching it directly at login pops a black
+ * console window. wscript running this vbs starts node with windowStyle 0
+ * (hidden), leaving only the tray icon.
+ */
+function writeVbsWrapper() {
+    // Chr(34) is a double-quote — avoids escaping headaches inside the vbs string.
+    // the Run argument ends up as: "<node.exe>" "<index.js>"
+    const vbs = [
+        'Set WshShell = CreateObject("WScript.Shell")',
+        'q = Chr(34)',
+        `WshShell.Run q & "${process.execPath}" & q & " " & q & "${APP_PATH}" & q, 0, False`,
+    ].join('\r\n') + '\r\n';
+
+    fs.writeFileSync(VBS_PATH, vbs, 'utf-8');
+}
+
+/**
+ * builds the reg.exe arguments to register the hidden launcher at login.
+ * uses execFileSync (not execSync) — args are passed as an array, never
+ * interpolated into a shell string, so there's no shell injection risk.
  * @returns {string[]}
  */
 function buildAddArgs() {
-    const nodePath  = process.execPath;
-    const launchCmd = `"${nodePath}" "${APP_PATH}"`;
+    const launchCmd = `wscript.exe "${VBS_PATH}"`;
     return [
-        'add',
-        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+        'add', RUN_KEY,
         '/v', APP_NAME,
         '/t', 'REG_SZ',
         '/d', launchCmd,
@@ -24,7 +43,7 @@ function buildAddArgs() {
 }
 
 /**
- * enables autostart by writing a registry key (windows only).
+ * enables autostart: writes the hidden-launch wrapper and registers it (windows only).
  */
 function enableAutostart() {
     if (process.platform !== 'win32') {
@@ -32,25 +51,21 @@ function enableAutostart() {
         return;
     }
     try {
+        writeVbsWrapper();
         execFileSync('reg', buildAddArgs(), { stdio: 'pipe' });
-        console.log('[startup] autostart enabled');
+        console.log('[startup] autostart enabled (hidden launch)');
     } catch (e) {
         console.error('[startup] failed to enable autostart:', e.message);
     }
 }
 
 /**
- * disables autostart by removing the registry key (windows only).
+ * disables autostart: removes the registry key and the wrapper file (windows only).
  */
 function disableAutostart() {
     if (process.platform !== 'win32') return;
     try {
-        execFileSync('reg', [
-            'delete',
-            'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-            '/v', APP_NAME,
-            '/f',
-        ], { stdio: 'pipe' });
+        execFileSync('reg', ['delete', RUN_KEY, '/v', APP_NAME, '/f'], { stdio: 'pipe' });
         console.log('[startup] autostart disabled');
     } catch (e) {
         // key simply doesn't exist — not an error
@@ -58,6 +73,10 @@ function disableAutostart() {
             console.error('[startup] failed to disable autostart:', e.message);
         }
     }
+    // clean up the wrapper file
+    try {
+        if (fs.existsSync(VBS_PATH)) fs.unlinkSync(VBS_PATH);
+    } catch { /* ignore */ }
 }
 
 /**
@@ -67,11 +86,7 @@ function disableAutostart() {
 function isAutostartEnabled() {
     if (process.platform !== 'win32') return false;
     try {
-        execFileSync('reg', [
-            'query',
-            'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-            '/v', APP_NAME,
-        ], { stdio: 'pipe' });
+        execFileSync('reg', ['query', RUN_KEY, '/v', APP_NAME], { stdio: 'pipe' });
         return true;
     } catch {
         return false;
