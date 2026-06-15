@@ -15,6 +15,7 @@ let lastChannel  = '';
 let servedTimer  = null;
 
 async function pingProxy() {
+    const wasAlive = proxyAlive;
     try {
         const res  = await fetch(`${PROXY_ORIGIN}/ping`, { signal: AbortSignal.timeout(2000) });
         const data = await res.json();
@@ -23,6 +24,11 @@ async function pingProxy() {
     } catch {
         proxyAlive = false;
         disconnectSse();
+    }
+    // when the proxy just became reachable, (re)load settings + stats
+    if (proxyAlive && !wasAlive) {
+        fetchSettings();
+        fetchStats();
     }
     updateIcon();
     if (proxyAlive && !sseSource) connectSse();
