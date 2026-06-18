@@ -4,46 +4,46 @@ const path = require('path');
 
 const APP_NAME = 'PurpleAdBlock';
 const APP_PATH = path.resolve(__dirname, 'index.js');
-const VBS_PATH = path.resolve(__dirname, 'launch-hidden.vbs');
-const RUN_KEY  = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+
+// local hidden-launch wrapper, also handy to double-click manually
+const VBS_LOCAL = path.resolve(__dirname, 'launch-hidden.vbs');
+
+// the windows per-user startup folder runs everything inside it at login
+const STARTUP_DIR = process.env.APPDATA
+    ? path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+    : null;
+const VBS_STARTUP = STARTUP_DIR ? path.join(STARTUP_DIR, `${APP_NAME}.vbs`) : null;
+
+// legacy autostart location used by older versions — cleaned up on enable/disable
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 
 /**
- * writes a .vbs wrapper that launches the proxy with a hidden window.
- * node.exe is a console app, so launching it directly at login pops a black
- * console window. wscript running this vbs starts node with windowStyle 0
- * (hidden), leaving only the tray icon.
+ * builds the .vbs content that launches the proxy with a hidden window.
+ * node.exe is a console app; wscript running this starts it with windowStyle 0
+ * (hidden), leaving only the tray icon. Chr(34) supplies the quotes around the
+ * paths (which contain spaces) without escaping headaches.
+ * @returns {string}
  */
-function writeVbsWrapper() {
-    // Chr(34) is a double-quote — avoids escaping headaches inside the vbs string.
-    // the Run argument ends up as: "<node.exe>" "<index.js>"
-    const vbs = [
+function vbsContent() {
+    return [
         'Set WshShell = CreateObject("WScript.Shell")',
         'q = Chr(34)',
         `WshShell.Run q & "${process.execPath}" & q & " " & q & "${APP_PATH}" & q, 0, False`,
     ].join('\r\n') + '\r\n';
-
-    fs.writeFileSync(VBS_PATH, vbs, 'utf-8');
 }
 
 /**
- * builds the reg.exe arguments to register the hidden launcher at login.
- * uses execFileSync (not execSync) — args are passed as an array, never
- * interpolated into a shell string, so there's no shell injection risk.
- * @returns {string[]}
+ * removes the legacy Run registry key if present (migration cleanup).
  */
-function buildAddArgs() {
-    const launchCmd = `wscript.exe "${VBS_PATH}"`;
-    return [
-        'add', RUN_KEY,
-        '/v', APP_NAME,
-        '/t', 'REG_SZ',
-        '/d', launchCmd,
-        '/f',
-    ];
+function removeLegacyRunKey() {
+    if (process.platform !== 'win32') return;
+    try {
+        execFileSync('reg', ['delete', RUN_KEY, '/v', APP_NAME, '/f'], { stdio: 'pipe' });
+    } catch { /* key absent — fine */ }
 }
 
 /**
- * enables autostart: writes the hidden-launch wrapper and registers it (windows only).
+ * enables autostart by dropping a hidden-launch .vbs in the windows startup folder.
  */
 function enableAutostart() {
     if (process.platform !== 'win32') {
@@ -51,46 +51,38 @@ function enableAutostart() {
         return;
     }
     try {
-        writeVbsWrapper();
-        execFileSync('reg', buildAddArgs(), { stdio: 'pipe' });
-        console.log('[startup] autostart enabled (hidden launch)');
+        const vbs = vbsContent();
+        fs.writeFileSync(VBS_LOCAL, vbs, 'utf-8'); // keep a local copy to double-click
+        if (VBS_STARTUP) fs.writeFileSync(VBS_STARTUP, vbs, 'utf-8');
+        removeLegacyRunKey(); // avoid launching twice
+        console.log('[startup] autostart enabled (startup folder, hidden launch)');
     } catch (e) {
         console.error('[startup] failed to enable autostart:', e.message);
     }
 }
 
 /**
- * disables autostart: removes the registry key and the wrapper file (windows only).
+ * disables autostart by removing the .vbs from the startup folder.
+ * the local launch-hidden.vbs is kept so it can still be launched manually.
  */
 function disableAutostart() {
     if (process.platform !== 'win32') return;
     try {
-        execFileSync('reg', ['delete', RUN_KEY, '/v', APP_NAME, '/f'], { stdio: 'pipe' });
+        if (VBS_STARTUP && fs.existsSync(VBS_STARTUP)) fs.unlinkSync(VBS_STARTUP);
+        removeLegacyRunKey();
         console.log('[startup] autostart disabled');
     } catch (e) {
-        // key simply doesn't exist — not an error
-        if (!e.stderr?.toString().includes('unable to find')) {
-            console.error('[startup] failed to disable autostart:', e.message);
-        }
+        console.error('[startup] failed to disable autostart:', e.message);
     }
-    // clean up the wrapper file
-    try {
-        if (fs.existsSync(VBS_PATH)) fs.unlinkSync(VBS_PATH);
-    } catch { /* ignore */ }
 }
 
 /**
- * returns true if the autostart registry key exists.
+ * returns true if the startup-folder launcher exists.
  * @returns {boolean}
  */
 function isAutostartEnabled() {
-    if (process.platform !== 'win32') return false;
-    try {
-        execFileSync('reg', ['query', RUN_KEY, '/v', APP_NAME], { stdio: 'pipe' });
-        return true;
-    } catch {
-        return false;
-    }
+    if (process.platform !== 'win32' || !VBS_STARTUP) return false;
+    return fs.existsSync(VBS_STARTUP);
 }
 
 module.exports = { enableAutostart, disableAutostart, isAutostartEnabled };
